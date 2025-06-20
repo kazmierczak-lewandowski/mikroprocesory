@@ -2,7 +2,7 @@
 
 #include <MD_MAX72xx.h>
 #include <SPI.h>
-
+#include <EEPROM.h>
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define MAX_DEVICES 4
 #define ROWS 8
@@ -13,6 +13,7 @@
 #define CLOSE_IN 4
 #define OPEN_IN 3
 #define HALF 2
+#define SAVE 5
 
 auto mx =
     MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
@@ -20,6 +21,7 @@ int currentDevice = 3;
 int currentRow = 7;
 unsigned long lastMillis = 0;
 unsigned long lastPress = 0;
+unsigned long lastSave = 0;
 bool isClosing = false;
 bool isOpening = false;
 bool isHalf = false;
@@ -99,22 +101,45 @@ void half() {
     }
   }
 }
+void save() {
+  if (millis() < DELAY + lastSave) {
+    return;
+  }
+  int valueToSave = currentDevice * ROWS + currentRow;
+  EEPROM.write(0, valueToSave);
+  int isHalfOpen = 0;
+  if(isHalf) {
+    isHalfOpen = 1;
+  }
+  EEPROM.write(1, isHalfOpen);
+}
 void setup() {
   Serial.begin(57600);
   pinMode(CLOSE_IN, INPUT_PULLUP);
   pinMode(OPEN_IN, INPUT_PULLUP);
   pinMode(HALF, INPUT_PULLUP);
-
+  pinMode(SAVE, INPUT_PULLUP);
   mx.begin();
   mx.control(MD_MAX72XX::INTENSITY, 0);
-  for (int i = 0; i < MAX_DEVICES; i++) {
+  int saveFull = EEPROM.read(0);
+  int saveHalf = EEPROM.read(1);
+  isHalf = (saveHalf == 1);
+  int rowsToLight = saveFull % ROWS;
+  int devicesToLight = saveFull / ROWS;
+  for (int i = 0; i < devicesToLight; i++) {
     for (int j = 0; j < ROWS; j++) {
       setRowFull(i, j);
     }
   }
+  for(int i = 0; i < rowsToLight; i++) {
+    setRowFull(devicesToLight, i);
+  }
 }
 
 void loop() {
+  if(digitalRead(SAVE) == LOW) {
+    save();
+  }
   if (digitalRead(CLOSE_IN) == HIGH) {
     isClosing = false;
   }
